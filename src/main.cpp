@@ -185,6 +185,7 @@ struct hexagons_graphic {
 
 	std::vector<qpl::f64> heatmap;
 
+	constexpr static auto use_heatmap = true;
 	bool created = false;
 
 	hexagons_graphic() {
@@ -218,7 +219,7 @@ struct hexagons_graphic {
 		}
 	}
 	void set(qpl::size index) {
-		this->heatmap[index] += 0.05;
+		this->heatmap[index] += 0.1;
 	}
 	void set(qpl::size index, hexagon hexagon) {
 		for (qpl::size i = 0u; i < 18u; ++i) {
@@ -240,12 +241,19 @@ struct hexagons_graphic {
 			for (qpl::size i = 0u; i < hexagons.size(); ++i) {
 				if (this->before[i] != hexagons[i]) {
 					this->before[i] = hexagons[i];
-					//this->set(i, hexagons[i]);
-					this->set(i);
+					if constexpr (use_heatmap) {
+						this->set(i);
+					}
+					else {
+						this->set(i, hexagons[i]);
+					}
 				}
-				this->heatmap[i] *= 0.97;
-				auto color = qpl::rgb::interpolation(std::vector{ qpl::rgb(20, 20, 20), qpl::rgb(100, 100, 255), qpl::rgb::white() }, this->heatmap[i]);
-				this->set(i, color);
+				if constexpr (use_heatmap) {
+					this->heatmap[i] *= 0.98;
+					this->heatmap[i] = qpl::clamp_0_1(this->heatmap[i]);
+					auto color = qpl::rgb::interpolation(std::vector{ qpl::rgb(20, 20, 20), qpl::rgb(100, 100, 255), qpl::rgb::white() }, this->heatmap[i]);
+					this->set(i, color);
+				}
 			}
 		}
 	}

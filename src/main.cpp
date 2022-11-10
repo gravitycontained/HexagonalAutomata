@@ -3,13 +3,28 @@
 using hexagon = qpl::u8;
 
 constexpr auto state_size = 2u;
-constexpr auto state_colors = std::array{ qpl::rgb(20, 20, 20), qpl::rgb::white(), qpl::rgb::red()};
+//constexpr auto state_colors = std::array{ qpl::rgb(20, 20, 20), qpl::rgb::white(), qpl::rgb::red()};
+std::array<qpl::rgb, state_size> state_colors;
+
+void make_state_colors() {
+	state_colors[0] = qpl::rgb(20, 20, 20);
+
+	auto stop = state_size - 1;
+	for (qpl::size i = 0u; i < stop; ++i) {
+		auto delta = qpl::f64_cast(i) / stop;
+		state_colors[i + 1] = qpl::get_rainbow_color(delta);
+	}
+}
+constexpr auto NEIGHBOURS_RADIUS = 2;
+constexpr auto NEIGHBOURS_SIZE = NEIGHBOURS_RADIUS * 6;
+
+struct rule {
+
+};
 
 struct hexagons {
-
 	std::vector<hexagon> hexagons;
 	qpl::vec2s dimension;
-	constexpr static auto search_n = 2;
 
 	hexagon& operator[](qpl::size index) {
 		return this->hexagons[index];
@@ -52,17 +67,17 @@ struct hexagons {
 	std::array<qpl::size, state_size> count_neighbours(qpl::i32 x, qpl::i32 y) const {
 		std::array<qpl::size, state_size> result{};
 
-		for (qpl::isize col = 0; col < this->search_n * 2 + 1; ++col) {
-			auto width = (col + this->search_n + 1);
-			if (col > this->search_n) {
-				width = (this->search_n * 2 + 1) - (col - this->search_n);
+		for (qpl::isize col = 0; col < NEIGHBOUR_RADIUS * 2 + 1; ++col) {
+			auto width = (col + NEIGHBOUR_RADIUS + 1);
+			if (col > NEIGHBOUR_RADIUS) {
+				width = (NEIGHBOUR_RADIUS * 2 + 1) - (col - NEIGHBOUR_RADIUS);
 			}
 
 			for (qpl::isize i = 0; i < width; ++i) {
 
-				auto dy = col - this->search_n;
+				auto dy = col - NEIGHBOUR_RADIUS;
 				auto cy = y + dy;
-				auto cx = x + i - this->search_n + (qpl::abs(dy) / 2);
+				auto cx = x + i - NEIGHBOUR_RADIUS + (qpl::abs(dy) / 2);
 				if ((dy % 2) && (y % 2)) cx += 1;
 
 				if (cx >= 0 && cy >= 0 && cx < this->dimension.x && cy < this->dimension.y) {
@@ -185,7 +200,7 @@ struct hexagons_graphic {
 
 	std::vector<qpl::f64> heatmap;
 
-	constexpr static auto use_heatmap = true;
+	constexpr static auto use_heatmap = false;
 	bool created = false;
 
 	hexagons_graphic() {
@@ -266,6 +281,7 @@ struct hexagons_graphic {
 struct main_state : qsf::base_state {
 	void init() override {
 
+		make_state_colors();
 		this->call_on_resize();
 
 		this->hexagons.create({ 400, 400 });

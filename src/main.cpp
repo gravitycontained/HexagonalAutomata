@@ -17,10 +17,23 @@ void make_state_colors() {
 }
 constexpr auto NEIGHBOURS_RADIUS = 2;
 constexpr auto NEIGHBOURS_SIZE = NEIGHBOURS_RADIUS * 6;
+using neighbours_uint = qpl::ubit<((qpl::log2(NEIGHBOURS_SIZE)) / 8 + 1) * 8>;
 
 struct rule {
+	std::array<std::array<qpl::u8, NEIGHBOURS_SIZE>, state_size> associations;
 
+	void randomize() {
+		for (auto& i : this->associations) {
+			for (auto& i : i) {
+				i = qpl::random(0u, state_size - 1);
+			}
+		}
+	}
+	qpl::u8 get(qpl::u8 target, const std::array<neighbours_uint, state_size>& neighbours) const {
+		return this->associations[target][neighbours[target]];
+	}
 };
+
 
 struct hexagons {
 	std::vector<hexagon> hexagons;
@@ -64,8 +77,8 @@ struct hexagons {
 		}
 	}
 
-	std::array<qpl::size, state_size> count_neighbours(qpl::i32 x, qpl::i32 y) const {
-		std::array<qpl::size, state_size> result{};
+	std::array<neighbours_uint, state_size> count_neighbours(qpl::i32 x, qpl::i32 y) const {
+		std::array<neighbours_uint, state_size> result{};
 
 		for (qpl::isize col = 0; col < NEIGHBOURS_RADIUS * 2 + 1; ++col) {
 			auto width = (col + NEIGHBOURS_RADIUS + 1);

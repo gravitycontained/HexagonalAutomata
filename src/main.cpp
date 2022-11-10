@@ -67,17 +67,17 @@ struct hexagons {
 	std::array<qpl::size, state_size> count_neighbours(qpl::i32 x, qpl::i32 y) const {
 		std::array<qpl::size, state_size> result{};
 
-		for (qpl::isize col = 0; col < NEIGHBOUR_RADIUS * 2 + 1; ++col) {
-			auto width = (col + NEIGHBOUR_RADIUS + 1);
-			if (col > NEIGHBOUR_RADIUS) {
-				width = (NEIGHBOUR_RADIUS * 2 + 1) - (col - NEIGHBOUR_RADIUS);
+		for (qpl::isize col = 0; col < NEIGHBOURS_RADIUS * 2 + 1; ++col) {
+			auto width = (col + NEIGHBOURS_RADIUS + 1);
+			if (col > NEIGHBOURS_RADIUS) {
+				width = (NEIGHBOURS_RADIUS * 2 + 1) - (col - NEIGHBOURS_RADIUS);
 			}
 
 			for (qpl::isize i = 0; i < width; ++i) {
 
-				auto dy = col - NEIGHBOUR_RADIUS;
+				auto dy = col - NEIGHBOURS_RADIUS;
 				auto cy = y + dy;
-				auto cx = x + i - NEIGHBOUR_RADIUS + (qpl::abs(dy) / 2);
+				auto cx = x + i - NEIGHBOURS_RADIUS + (qpl::abs(dy) / 2);
 				if ((dy % 2) && (y % 2)) cx += 1;
 
 				if (cx >= 0 && cy >= 0 && cx < this->dimension.x && cy < this->dimension.y) {

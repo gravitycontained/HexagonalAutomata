@@ -213,7 +213,7 @@ struct hexagons_graphic {
 
 	std::vector<qpl::f64> heatmap;
 
-	constexpr static auto use_heatmap = true;
+	constexpr static auto use_heatmap = false;
 	bool created = false;
 
 	hexagons_graphic() {

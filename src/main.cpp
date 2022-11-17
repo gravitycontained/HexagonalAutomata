@@ -1,9 +1,9 @@
 #include <qpl/qpl.hpp>
 
 
-constexpr auto state_size = 8u;
-constexpr auto NEIGHBOURS_RADIUS = 2;
-constexpr auto hexagons_dimension = qpl::vec(300, 300);
+constexpr auto state_size = 4u;
+constexpr auto NEIGHBOURS_RADIUS = 4;
+constexpr auto hexagons_dimension = qpl::vec(600, 600);
 
 constexpr auto NEIGHBOURS_SIZE = qpl::triangle_number(NEIGHBOURS_RADIUS) * 6 + 1;
 

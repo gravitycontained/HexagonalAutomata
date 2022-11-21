@@ -1,13 +1,43 @@
 #include <qpl/qpl.hpp>
 
+constexpr qpl::size max_distint_colors = 30;
+
 namespace info {
 	auto state_size = 4u;
 	auto neighbours_radius = 4;
 	auto hexagons_dimension = qpl::vec(300, 300);
 	qpl::f64 empty_rule_chance = 0.5;
 	qpl::f64 random_fill_chance = 2.0;
+	qpl::size distinct_color_size = 5;
 	qpl::size neighbours_size;
 
+	std::vector<qpl::rgb> distinct_colors;
+	std::vector<qpl::rgb> state_colors;
+
+	void reshuffle_state_colors() {
+		auto stop = info::state_size - 1;
+		if (info::distinct_color_size == max_distint_colors) {
+			for (qpl::size i = 0u; i < stop; ++i) {
+				state_colors[i + 1] = qpl::random_b(0.5) ? qpl::get_random_color() : qpl::get_random_rainbow_color();
+			}
+		}
+		else {
+			for (qpl::size i = 0u; i < stop; ++i) {
+				state_colors[i + 1] = qpl::random_element(info::distinct_colors);
+			}
+		}
+	}
+	void make_state_colors() {
+		state_colors.resize(info::state_size);
+		state_colors[0] = qpl::rgb(20, 20, 20);
+
+		info::distinct_colors.resize(info::distinct_color_size);
+		for (auto& i : info::distinct_colors) {
+			i = qpl::random_b(0.5) ? qpl::get_random_color() : qpl::get_random_rainbow_color();
+		}
+
+		info::reshuffle_state_colors();
+	}
 	void calculate_neighbours_size() {
 		neighbours_size = qpl::size_cast(qpl::triangle_number(neighbours_radius) * 6 + 1);
 	}
@@ -18,22 +48,10 @@ using neighbours_uint = qpl::u16;
 using hexagon = qpl::u8;
 constexpr auto undefined = qpl::type_max<hexagon>();
 
-std::vector<qpl::rgb> state_colors;
 
-void make_state_colors() {
-	state_colors.resize(info::state_size);
-	state_colors[0] = qpl::rgb(20, 20, 20);
-
-	auto stop = info::state_size - 1;
-	for (qpl::size i = 0u; i < stop; ++i) {
-		auto delta = qpl::f64_cast(i) / stop;
-		state_colors[i + 1] = qpl::get_random_color();
-
-	}
-}
 struct rule {
 	struct association {
-		qpl::vector<hexagon> table;
+		qpl::vector<hexagon> result_table;
 		qpl::size state_index;
 	};
 
@@ -42,8 +60,8 @@ struct rule {
 	void randomize(qpl::f64 ignore_chance) {
 		this->associations.resize(info::state_size);
 		for (auto& i : this->associations) {
-			i.table.resize(info::neighbours_size);
-			for (auto& i : i.table) {
+			i.result_table.resize(info::neighbours_size);
+			for (auto& i : i.result_table) {
 				i = qpl::random(1u, info::state_size - 1);
 				if (qpl::random_b(ignore_chance)) {
 					i = undefined;
@@ -51,9 +69,40 @@ struct rule {
 			}
 			i.state_index = qpl::random(0u, info::state_size - 1);
 		}
+		
+		if (!this->associations.empty() && !this->associations[0].result_table.empty()) {
+			this->associations[0].state_index = qpl::random(1u, info::state_size - 1);
+		}
+	}
+	void mutate() {
+		qpl::size mode = qpl::random(0u, 2u);
+		switch (mode) {
+		case 0u:
+			while (true) {
+				auto& association = qpl::random_element(this->associations);
+				auto before = association.state_index;
+				association.state_index = qpl::random(0u, info::state_size - 1);
+				if (association.state_index != before) {
+					break;
+				}
+			}
+			break;
+		default:
+			while (true) {
+				auto& association = qpl::random_element(this->associations);
+				auto& table = qpl::random_element(association.result_table);
+				auto before = table;
+				table = (mode == 1 ? undefined : qpl::random(1u, info::state_size - 1));
+				if (table != before) {
+					break;
+				}
+				association = qpl::random_element(this->associations);
+			}
+		}
 	}
 	hexagon get(hexagon target, const std::vector<neighbours_uint>& neighbours) const {
-		auto value = this->associations[target].table[neighbours[this->associations[target].state_index]];
+		const auto& association = this->associations[target];
+		auto value = association.result_table[neighbours[association.state_index]];
 		if (value == undefined) {
 			return target;
 		}
@@ -64,9 +113,9 @@ struct rule {
 		std::ostringstream stream;
 		for (qpl::size i = 0u; i < this->associations.size(); ++i) {
 			stream << "for current state " << i << " and neighbour state " << (int)this->associations[i].state_index << "\n---";
-			for (qpl::size a = 0u; a < this->associations[i].table.size(); ++a) {
-				if (this->associations[i].table[a] != undefined) {
-					stream  << a << " -> " << (int)(this->associations[i].table[a]) << ", ";
+			for (qpl::size a = 0u; a < this->associations[i].result_table.size(); ++a) {
+				if (this->associations[i].result_table[a] != undefined) {
+					stream  << a << " -> " << (int)(this->associations[i].result_table[a]) << ", ";
 				}
 			}
 			stream << '\n';
@@ -80,10 +129,10 @@ struct rule {
 		state.save(info::neighbours_radius);
 		state.save(info::random_fill_chance);
 		state.save(info::empty_rule_chance);
-		state.save(state_colors);
+		state.save(info::state_colors);
 		for (auto& i : this->associations) {
 			state.save(i.state_index);
-			state.save(i.table);
+			state.save(i.result_table);
 		}
 		state.file_save(file);
 	}
@@ -97,14 +146,26 @@ struct rule {
 		state.load(info::empty_rule_chance);
 		info::calculate_neighbours_size();
 
-		state_colors.resize(info::state_size);
-		state.load(state_colors);
+
+		info::state_colors.resize(info::state_size);
+		state.load(info::state_colors);
+
+		info::distinct_color_size = 0u;
+		std::unordered_set<qpl::rgb> seen;
+		for (auto& color : info::state_colors) {
+			if (seen.find(color) == seen.cend()) {
+				info::distinct_colors.push_back(color);
+				++info::distinct_color_size;
+				seen.insert(color);
+			}
+		}
+		info::distinct_color_size = qpl::min(info::distinct_color_size, max_distint_colors);
 
 		this->associations.resize(info::state_size);
 		for (auto& i : this->associations) {
-			i.table.resize(info::neighbours_size);
+			i.result_table.resize(info::neighbours_size);
 			state.load(i.state_index);
-			state.load(i.table);
+			state.load(i.result_table);
 		}
 	}
 };
@@ -283,7 +344,7 @@ struct hexagons_graphic {
 	}
 	void set(qpl::size index, hexagon hexagon) {
 		for (qpl::size i = 0u; i < 18u; ++i) {
-			this->va[index * 18 + i].color = state_colors[hexagon];
+			this->va[index * 18 + i].color = info::state_colors[hexagon];
 		}
 	}
 
@@ -324,20 +385,9 @@ struct hexagons_graphic {
 };
 
 struct main_state : qsf::base_state {
-	void print_commands() {
-		qpl::println("'A'     - for slower update");
-		qpl::println("'D'     - for slower update");
-		qpl::println("'R'     - randomize state again");
-		qpl::println("'C'     - randomize state colors");
-		qpl::println("'Space' - next random rule");
-		qpl::println("'X'     - toggle auto update mode");
-		qpl::println("'L'     - to load random rule from rules/");
-		qpl::println("'S'     - save current rule to rules/");
-		qpl::println();
-	}
 	void init() override {
 		info::calculate_neighbours_size();
-		make_state_colors();
+		info::make_state_colors();
 
 		this->print_commands();
 
@@ -348,27 +398,60 @@ struct main_state : qsf::base_state {
 
 		this->next_random_rule();
 
-		info::empty_rule_chance = 0.5;
-		info::random_fill_chance = 2.0;
-		this->slider_empty_rule.set_dimensions({ 600, 20 }, { 20, 20 });
-		this->slider_empty_rule.set_position({ 20, 20 });
-		this->slider_empty_rule.set_range(0.0, 1.0, 0.5);
+		auto width = 20;
+		auto increase = 2;
+		qpl::size slider_ctr = 0u;
+
+		this->slider_empty_rule.set_text_font("helvetica");
+		this->slider_empty_rule.set_text_character_size(12);
+		this->slider_empty_rule.set_text_color(qpl::rgb::grey_shade(150));
+		this->slider_empty_rule.set_text_string("empty rule: ");
+		this->slider_empty_rule.set_dimensions({ 600, 15 }, { 10, 15 });
+		this->slider_empty_rule.set_position({ 20, width + (slider_ctr++) * (width + increase) });
+		this->slider_empty_rule.set_range(0.0, 1.0, info::empty_rule_chance);
 
 		this->slider_random_fill = this->slider_empty_rule;
-		this->slider_random_fill.set_position({ 20, 50 });
-		this->slider_random_fill.set_range(0.0, 6.0, 2.0);
-
-		this->slider_state_size = this->slider_empty_rule;
-		this->slider_state_size.set_position({ 20, 80 });
-		this->slider_state_size.set_range(2, 254, 4);
+		this->slider_random_fill.set_text_string("random fill: ");
+		this->slider_random_fill.set_position({ 20, width + (slider_ctr++) * (width + increase) });
+		this->slider_random_fill.set_range(0.0, 6.0, info::random_fill_chance);
 
 		this->slider_neighbour_radius = this->slider_empty_rule;
-		this->slider_neighbour_radius.set_position({ 20, 110 });
+		this->slider_neighbour_radius.set_text_string("neighbour radius: ");
+		this->slider_neighbour_radius.set_position({ 20, width + (slider_ctr++) * (width + increase) });
 		this->slider_neighbour_radius.set_range(1, 15, 2);
 
+		this->slider_state_size = this->slider_empty_rule;
+		this->slider_state_size.set_text_string("state size: ");
+		this->slider_state_size.set_position({ 20, width + (slider_ctr++) * (width + increase) });
+		this->slider_state_size.set_range(2, 254, 4);
+
+		this->slider_distinct_colors = this->slider_empty_rule;
+		this->slider_distinct_colors.set_text_string("distinct colors: ");
+		this->slider_distinct_colors.set_position({ 20, width + (slider_ctr++) * (width + increase) });
+		this->slider_distinct_colors.set_range(1, 30, info::distinct_color_size);
+		this->slider_distinct_colors.set_text_string_function([](auto s) { return s == max_distint_colors ? qpl::to_string("disabled") : qpl::to_string(s); });
+
 		this->slider_dimension = this->slider_empty_rule;
-		this->slider_dimension.set_position({ 20, 140 });
+		this->slider_dimension.set_text_string("dimension: ");
+		this->slider_dimension.set_text_string_function([](auto s) {return qpl::to_string(s, " x ", s); });
+		this->slider_dimension.set_position({ 20, width + (slider_ctr++) * (width + increase) });
 		this->slider_dimension.set_range(10, 1000, 300);
+
+	}
+
+	void print_commands() {
+		qpl::println("'A'     - for slower update");
+		qpl::println("'C'     - randomize state colors");
+		qpl::println("'V'     - reshuffle state colors");
+		qpl::println("'D'     - for slower update");
+		qpl::println("'L'     - to load random rule from rules/");
+		qpl::println("'M'     - mutate current rule");
+		qpl::println("'P'     - print current rule");
+		qpl::println("'S'     - save current rule to rules/");
+		qpl::println("'R'     - randomize state again");
+		qpl::println("'X'     - toggle auto update mode");
+		qpl::println("'Space' - next random rule");
+		qpl::println();
 	}
 	void call_on_resize() override {
 		this->view.set_hitbox(*this);
@@ -411,6 +494,7 @@ struct main_state : qsf::base_state {
 		this->update(this->slider_state_size);
 		this->update(this->slider_neighbour_radius);
 		this->update(this->slider_dimension);
+		this->update(this->slider_distinct_colors);
 
 		if (this->slider_empty_rule.value_was_modified()) {
 			info::empty_rule_chance = this->slider_empty_rule.get_value();
@@ -422,7 +506,7 @@ struct main_state : qsf::base_state {
 		}
 		if (this->slider_state_size.value_was_modified()) {
 			info::state_size = this->slider_state_size.get_value();
-			make_state_colors();
+			info::make_state_colors();
 			this->next_random_rule();
 		}
 		if (this->slider_neighbour_radius.value_was_modified()) {
@@ -436,9 +520,19 @@ struct main_state : qsf::base_state {
 			this->graphic.update(this->hexagons);
 			this->randomize_hexagons();
 		}
+		if (this->slider_distinct_colors.value_was_modified()) {
+			info::distinct_color_size = this->slider_distinct_colors.get_value();
+			info::make_state_colors();
+			this->graphic.before.reset();
+			this->graphic.update(this->hexagons);
+		}
 
-
-		bool dragging = (this->slider_empty_rule.dragging || this->slider_random_fill.dragging || this->slider_state_size.dragging || this->slider_neighbour_radius.dragging || this->slider_dimension.dragging);
+		bool dragging = (this->slider_empty_rule.dragging ||
+			this->slider_random_fill.dragging || 
+			this->slider_state_size.dragging || 
+			this->slider_neighbour_radius.dragging ||
+			this->slider_dimension.dragging ||
+			this->slider_distinct_colors.dragging);
 
 		this->view.allow_dragging = !dragging;
 		this->update(this->view);
@@ -463,12 +557,24 @@ struct main_state : qsf::base_state {
 			auto file = qpl::to_string("rules/", qpl::get_current_time_string_ymdhmsms_compact(), "_rule.dat");
 			this->hexagons.rule.save(file);
 		}
+		if (this->event().key_single_pressed(sf::Keyboard::P)) {
+			qpl::println(this->hexagons.rule.info_string(), "\n\n");
+		}
 		if (this->event().key_single_pressed(sf::Keyboard::C)) {
-			make_state_colors();
+			info::make_state_colors();
+			this->graphic.before.reset();
+			this->graphic.update(this->hexagons);
+		}
+		if (this->event().key_single_pressed(sf::Keyboard::V)) {
+			info::reshuffle_state_colors();
 			this->graphic.before.reset();
 			this->graphic.update(this->hexagons);
 		}
 		if (this->event().key_single_pressed(sf::Keyboard::R)) {
+			this->randomize_hexagons();
+		}
+		if (this->event().key_pressed(sf::Keyboard::M)) {
+			this->hexagons.rule.mutate();
 			this->randomize_hexagons();
 		}
 		if (this->event().key_single_pressed(sf::Keyboard::Space)) {
@@ -489,6 +595,7 @@ struct main_state : qsf::base_state {
 		this->draw(this->slider_state_size);
 		this->draw(this->slider_neighbour_radius);
 		this->draw(this->slider_dimension);
+		this->draw(this->slider_distinct_colors);
 	}
 
 	hexagons hexagons;
@@ -500,6 +607,8 @@ struct main_state : qsf::base_state {
 	qsf::slider<qpl::size> slider_state_size;
 	qsf::slider<qpl::size> slider_neighbour_radius;
 	qsf::slider<qpl::size> slider_dimension;
+	qsf::slider<qpl::size> slider_distinct_colors;
+	qpl::size file_index = 0u;
 
 	qpl::small_clock update_clock;
 	qpl::f64 update_delta = 0.01;
@@ -510,6 +619,7 @@ struct main_state : qsf::base_state {
 int main() try {
 	qsf::framework framework;
 	framework.set_title("QPL");
+	framework.add_font("helvetica", "resources/Helvetica.ttf");
 	framework.set_dimension({ 1400u, 950u });
 
 	framework.add_state<main_state>();

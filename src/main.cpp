@@ -4,9 +4,11 @@ namespace info {
 	auto state_size = 4u;
 	auto neighbours_radius = 4;
 	auto hexagons_dimension = qpl::vec(300, 300);
+	qpl::f64 empty_rule_chance = 0.5;
+	qpl::f64 random_fill_chance = 2.0;
 	qpl::size neighbours_size;
 
-	void calculate() {
+	void calculate_neighbours_size() {
 		neighbours_size = qpl::size_cast(qpl::triangle_number(neighbours_radius) * 6 + 1);
 	}
 }
@@ -31,11 +33,11 @@ void make_state_colors() {
 }
 struct rule {
 	struct association {
-		std::vector<hexagon> table;
+		qpl::vector<hexagon> table;
 		qpl::size state_index;
 	};
 
-	std::vector<association> associations;
+	qpl::vector<association> associations;
 
 	void randomize(qpl::f64 ignore_chance) {
 		this->associations.resize(info::state_size);
@@ -76,6 +78,8 @@ struct rule {
 		qpl::save_state state;
 		state.save(info::state_size);
 		state.save(info::neighbours_radius);
+		state.save(info::random_fill_chance);
+		state.save(info::empty_rule_chance);
 		state.save(state_colors);
 		for (auto& i : this->associations) {
 			state.save(i.state_index);
@@ -87,17 +91,18 @@ struct rule {
 		qpl::save_state state;
 		state.file_load(file);
 
-		qpl::u32 state_s;
-		qpl::i32 neighbour;
-		state.load(state_s);
-		state.load(neighbour);
+		state.load(info::state_size);
+		state.load(info::neighbours_radius);
+		state.load(info::random_fill_chance);
+		state.load(info::empty_rule_chance);
+		info::calculate_neighbours_size();
+
+		state_colors.resize(info::state_size);
 		state.load(state_colors);
 
-		info::state_size = state_s;
-		info::neighbours_radius = neighbour;
-		info::calculate();
-
+		this->associations.resize(info::state_size);
 		for (auto& i : this->associations) {
+			i.table.resize(info::neighbours_size);
 			state.load(i.state_index);
 			state.load(i.table);
 		}
@@ -180,37 +185,6 @@ struct hexagons {
 
 		return result;
 	}
-	void test() {
-		for (auto& i : this->collection) i = 0u;
-
-		auto random = qpl::random(this->dimension - 1);
-		auto x = random.x;
-		auto y = random.y;
-		this->collection[y * this->dimension.x + x] = 2u;
-
-		auto n = 3;
-		for (qpl::isize col = 0; col < n * 2 + 1; ++col) {
-			auto width = (col + n + 1);
-			if (col > n) {
-				width = (n * 2 + 1) - (col - n);
-			}
-
-			for (qpl::isize i = 0; i < width; ++i) {
-
-				auto dy = col - n;
-				auto cy = y + dy;
-				auto cx = x + i - n + (qpl::abs(dy) / 2);
-				if ((dy % 2) && (y % 2)) cx += 1;
-
-				if (cx >= 0 && cy >= 0 && cx < this->dimension.x && cy < this->dimension.y) {
-					if (!(cx == x && cy == y)) {
-						auto index = cy * this->dimension.x + cx;
-						this->collection[index] = 1u;
-					}
-				}
-			}
-		}
-	}
 	void udpate() {
 		auto copy = this->collection;
 		for (qpl::isize y = 0; y < this->dimension.y; ++y) {
@@ -230,7 +204,10 @@ struct hexagons {
 	void create(qpl::vec2s size) {
 		this->dimension = size;
 
-		this->collection.resize(size.x * size.y, 0u);
+		this->collection.resize(size.x * size.y);
+	}
+	void reset() {
+		std::fill(this->collection.begin(), this->collection.end(), undefined);
 	}
 };
 
@@ -278,7 +255,6 @@ struct hexagons_graphic {
 	}
 
 	void create(qpl::vec2s size) {
-		this->before.clear();
 		auto dim = size.x * size.y;
 
 		hexagon_shape hex;
@@ -313,31 +289,31 @@ struct hexagons_graphic {
 
 	void update(const hexagons& hexagons) {
 		if (!this->created) {
+			this->before.clear();
 			this->create(hexagons.dimension);
 		}
-		if (this->before.size() != hexagons.size()) {
-			for (qpl::size i = 0u; i < hexagons.size(); ++i) {
-				this->set(i, hexagons[i]);
-			}
-			this->before = hexagons;
+
+		if (hexagons.dimension != before.dimension) {
+			this->create(hexagons.dimension);
+			before.dimension = hexagons.dimension;
+			before.create(hexagons.dimension);
+			before.reset();
 		}
-		else {
-			for (qpl::size i = 0u; i < hexagons.size(); ++i) {
-				if (this->before[i] != hexagons[i]) {
-					this->before[i] = hexagons[i];
-					if constexpr (use_heatmap) {
-						this->set(i);
-					}
-					else {
-						this->set(i, hexagons[i]);
-					}
-				}
+		for (qpl::size i = 0u; i < hexagons.size(); ++i) {
+			if (this->before[i] != hexagons[i]) {
+				this->before[i] = hexagons[i];
 				if constexpr (use_heatmap) {
-					this->heatmap[i] *= 0.98;
-					this->heatmap[i] = qpl::clamp_0_1(this->heatmap[i]);
-					auto color = qpl::rgb::interpolation(std::vector{ qpl::rgb(20, 20, 20), qpl::rgb(100, 100, 255), qpl::rgb::white() }, this->heatmap[i]);
-					this->set(i, color);
+					this->set(i);
 				}
+				else {
+					this->set(i, hexagons[i]);
+				}
+			}
+			if constexpr (use_heatmap) {
+				this->heatmap[i] *= 0.98;
+				this->heatmap[i] = qpl::clamp_0_1(this->heatmap[i]);
+				auto color = qpl::rgb::interpolation(std::vector{ qpl::rgb(20, 20, 20), qpl::rgb(100, 100, 255), qpl::rgb::white() }, this->heatmap[i]);
+				this->set(i, color);
 			}
 		}
 	}
@@ -360,7 +336,7 @@ struct main_state : qsf::base_state {
 		qpl::println();
 	}
 	void init() override {
-		info::calculate();
+		info::calculate_neighbours_size();
 		make_state_colors();
 
 		this->print_commands();
@@ -372,7 +348,8 @@ struct main_state : qsf::base_state {
 
 		this->next_random_rule();
 
-
+		info::empty_rule_chance = 0.5;
+		info::random_fill_chance = 2.0;
 		this->slider_empty_rule.set_dimensions({ 600, 20 }, { 20, 20 });
 		this->slider_empty_rule.set_position({ 20, 20 });
 		this->slider_empty_rule.set_range(0.0, 1.0, 0.5);
@@ -388,6 +365,10 @@ struct main_state : qsf::base_state {
 		this->slider_neighbour_radius = this->slider_empty_rule;
 		this->slider_neighbour_radius.set_position({ 20, 110 });
 		this->slider_neighbour_radius.set_range(1, 15, 2);
+
+		this->slider_dimension = this->slider_empty_rule;
+		this->slider_dimension.set_position({ 20, 140 });
+		this->slider_dimension.set_range(10, 1000, 300);
 	}
 	void call_on_resize() override {
 		this->view.set_hitbox(*this);
@@ -395,7 +376,7 @@ struct main_state : qsf::base_state {
 	void randomize_hexagons() {
 		for (auto& i : this->hexagons) {
 			i = 0u;
-			if (qpl::random_b(1.0 / (std::pow(10, this->slider_random_fill.get_value())))) {
+			if (qpl::random_b(1.0 / (std::pow(10, info::random_fill_chance)))) {
 				i = qpl::random(0u, info::state_size - 1);
 			}
 		}
@@ -403,36 +384,61 @@ struct main_state : qsf::base_state {
 	}
 	void next_random_rule() {
 		this->update_ctr = 0u;
-		this->hexagons.rule.randomize(this->slider_empty_rule.get_value());
+		this->hexagons.rule.randomize(info::empty_rule_chance);
 		this->randomize_hexagons();
+	}
+	void load_random_rule() {
+		qpl::filesys::path path = qpl::to_string(qpl::filesys::get_current_location(), "/rules/");
+		auto files = path.list_current_directory();
 
-		//qpl::println(this->hexagons.rule.info_string());
-		//qpl::println();
-		//qpl::println();
+		files.list_keep_where_extension_equals(".dat");
+
+		auto index = qpl::random(0ull, files.size() - 1);
+		qpl::println("loading \"", files[index], "\"");
+		this->hexagons.rule.load(files[index]);
+
+		this->randomize_hexagons();
+		this->update_ctr = 0u;
+
+		this->slider_state_size.set_value(info::state_size);
+		this->slider_neighbour_radius.set_value(info::neighbours_radius);
+		this->slider_empty_rule.set_value(info::empty_rule_chance);
+		this->slider_random_fill.set_value(info::random_fill_chance);
 	}
 	void updating() override {
 		this->update(this->slider_empty_rule);
 		this->update(this->slider_random_fill);
 		this->update(this->slider_state_size);
 		this->update(this->slider_neighbour_radius);
+		this->update(this->slider_dimension);
 
-		if (this->slider_empty_rule.value_has_changed()) {
+		if (this->slider_empty_rule.value_was_modified()) {
+			info::empty_rule_chance = this->slider_empty_rule.get_value();
 			this->next_random_rule();
 		}
-		if (this->slider_random_fill.value_has_changed()) {
+		if (this->slider_random_fill.value_was_modified()) {
+			info::random_fill_chance = this->slider_random_fill.get_value();
 			this->randomize_hexagons();
 		}
-		if (this->slider_state_size.value_has_changed()) {
+		if (this->slider_state_size.value_was_modified()) {
 			info::state_size = this->slider_state_size.get_value();
 			make_state_colors();
 			this->next_random_rule();
 		}
-		if (this->slider_neighbour_radius.value_has_changed()) {
+		if (this->slider_neighbour_radius.value_was_modified()) {
 			info::neighbours_radius = this->slider_neighbour_radius.get_value();
-			info::calculate();
+			info::calculate_neighbours_size();
 			this->next_random_rule();
 		}
-		bool dragging = (this->slider_empty_rule.dragging || this->slider_random_fill.dragging || this->slider_state_size.dragging || this->slider_neighbour_radius.dragging);
+		if (this->slider_dimension.value_was_modified()) {
+			info::hexagons_dimension = qpl::vec2i::filled(this->slider_dimension.get_value());
+			this->hexagons.create(info::hexagons_dimension);
+			this->graphic.update(this->hexagons);
+			this->randomize_hexagons();
+		}
+
+
+		bool dragging = (this->slider_empty_rule.dragging || this->slider_random_fill.dragging || this->slider_state_size.dragging || this->slider_neighbour_radius.dragging || this->slider_dimension.dragging);
 
 		this->view.allow_dragging = !dragging;
 		this->update(this->view);
@@ -451,23 +457,7 @@ struct main_state : qsf::base_state {
 		}
 
 		if (this->event().key_single_pressed(sf::Keyboard::L)) {
-			qpl::filesys::path path = qpl::to_string(qpl::filesys::get_current_location(), "/rules/");
-			auto files = path.list_current_directory();
-
-			files.list_keep_where_extension_equals(".dat");
-
-			qpl::filesys::path target;
-			for (qpl::size i = 0u; i < 5000; ++i) {
-				auto index = qpl::random(0ull, files.size() - 1);
-				target = files[index];
-				this->hexagons.rule.load(target);
-			}
-			qpl::println("loading \"", target, "\"");
-			this->randomize_hexagons();
-			this->update_ctr = 0u;
-
-			this->slider_state_size.set_value(info::state_size);
-			this->slider_neighbour_radius.set_value(info::neighbours_radius);
+			this->load_random_rule();
 		}
 		if (this->event().key_single_pressed(sf::Keyboard::S)) {
 			auto file = qpl::to_string("rules/", qpl::get_current_time_string_ymdhmsms_compact(), "_rule.dat");
@@ -475,7 +465,7 @@ struct main_state : qsf::base_state {
 		}
 		if (this->event().key_single_pressed(sf::Keyboard::C)) {
 			make_state_colors();
-			this->graphic.before.clear();
+			this->graphic.before.reset();
 			this->graphic.update(this->hexagons);
 		}
 		if (this->event().key_single_pressed(sf::Keyboard::R)) {
@@ -498,6 +488,7 @@ struct main_state : qsf::base_state {
 		this->draw(this->slider_random_fill);
 		this->draw(this->slider_state_size);
 		this->draw(this->slider_neighbour_radius);
+		this->draw(this->slider_dimension);
 	}
 
 	hexagons hexagons;
@@ -508,6 +499,7 @@ struct main_state : qsf::base_state {
 	qsf::slider<qpl::f64> slider_random_fill;
 	qsf::slider<qpl::size> slider_state_size;
 	qsf::slider<qpl::size> slider_neighbour_radius;
+	qsf::slider<qpl::size> slider_dimension;
 
 	qpl::small_clock update_clock;
 	qpl::f64 update_delta = 0.01;

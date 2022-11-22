@@ -699,7 +699,7 @@ struct main_state : qsf::base_state {
 	qsf::check_box checkbox_switch_states;
 	qpl::size file_index = 0u;
 
-	qpl::circular_array<rule, 32> rules;
+	qpl::circular_array<rule, 512> rules;
 
 	qpl::small_clock update_clock;
 	qpl::f64 update_delta = 0.01;

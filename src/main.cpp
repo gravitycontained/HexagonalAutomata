@@ -564,13 +564,17 @@ struct main_state : qsf::base_state {
 			info::make_state_colors();
 			this->graphic.before.reset();
 			this->graphic.update(this->hexagons);
-			this->randomize_hexagons();
+			if (!this->event().key_holding(sf::Keyboard::LShift)) {
+				this->randomize_hexagons();
+			}
 		}
 		if (this->event().key_single_pressed(sf::Keyboard::V)) {
 			info::reshuffle_state_colors();
 			this->graphic.before.reset();
 			this->graphic.update(this->hexagons);
-			this->randomize_hexagons();
+			if (!this->event().key_holding(sf::Keyboard::LShift)) {
+				this->randomize_hexagons();
+			}
 		}
 		if (this->event().key_single_pressed(sf::Keyboard::R)) {
 			this->randomize_hexagons();

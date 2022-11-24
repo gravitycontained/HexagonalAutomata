@@ -473,9 +473,11 @@ struct main_state : qsf::base_state {
 
 	void print_commands() {
 		qpl::println("'A'     - for slower update");
+		qpl::println("'D'     - for faster update");
 		qpl::println("'C'     - randomize state colors");
 		qpl::println("'V'     - reshuffle state colors");
-		qpl::println("'D'     - for faster update");
+		qpl::println("'Q'     - load next rules/");
+		qpl::println("'E'     - load previous rules/");
 		qpl::println("'L'     - load random rule from rules/");
 		qpl::println("'M'     - mutate current rule");
 		qpl::println("'P'     - print current rule");
@@ -523,6 +525,56 @@ struct main_state : qsf::base_state {
 		this->previous_rule_ctr = 0u;
 	}
 
+	void update_slider_values() {
+		this->slider_state_size.set_value(info::state_size);
+		this->slider_neighbour_radius.set_value(info::neighbours_radius);
+		this->slider_empty_rule.set_value(info::empty_rule_chance);
+		this->slider_random_fill.set_value(info::random_fill_chance);
+	}
+	void load_next_file_rule() {
+		qpl::filesys::path path = qpl::to_string(qpl::filesys::get_current_location(), "/rules/");
+		auto files = path.list_current_directory();
+
+		files.list_keep_where_extension_equals(".dat");
+
+		if (!this->first_file_index_load) {
+			++this->file_index;
+			if (this->file_index >= files.size()) {
+				this->file_index = 0u;
+			}
+		}
+		this->first_file_index_load = false;
+
+		qpl::println("loading \"", files[this->file_index], "\"");
+		this->hexagons.rule.load(files[this->file_index]);
+		this->rules.add(this->hexagons.rule);
+
+		this->randomize_hexagons();
+		this->update_ctr = 0u;
+		this->update_slider_values();
+	}
+	void load_previous_file_rule() {
+		qpl::filesys::path path = qpl::to_string(qpl::filesys::get_current_location(), "/rules/");
+		auto files = path.list_current_directory();
+
+		files.list_keep_where_extension_equals(".dat");
+
+		if (!this->first_file_index_load) {
+			if (!this->file_index) {
+				this->file_index = files.size();
+			}
+			--this->file_index;
+		}
+		this->first_file_index_load = false;
+
+		qpl::println("loading \"", files[this->file_index], "\"");
+		this->hexagons.rule.load(files[this->file_index]);
+		this->rules.add(this->hexagons.rule);
+
+		this->randomize_hexagons();
+		this->update_ctr = 0u;
+		this->update_slider_values();
+	}
 	void load_random_rule() {
 		qpl::filesys::path path = qpl::to_string(qpl::filesys::get_current_location(), "/rules/");
 		auto files = path.list_current_directory();
@@ -530,17 +582,15 @@ struct main_state : qsf::base_state {
 		files.list_keep_where_extension_equals(".dat");
 
 		auto index = qpl::random(0ull, files.size() - 1);
+
+		this->file_index = index;
 		qpl::println("loading \"", files[index], "\"");
 		this->hexagons.rule.load(files[index]);
 		this->rules.add(this->hexagons.rule);
 
 		this->randomize_hexagons();
 		this->update_ctr = 0u;
-
-		this->slider_state_size.set_value(info::state_size);
-		this->slider_neighbour_radius.set_value(info::neighbours_radius);
-		this->slider_empty_rule.set_value(info::empty_rule_chance);
-		this->slider_random_fill.set_value(info::random_fill_chance);
+		this->update_slider_values();
 	}
 	void updating() override {
 		this->update(this->slider_empty_rule);
@@ -620,6 +670,12 @@ struct main_state : qsf::base_state {
 		else if (this->event().key_single_pressed(sf::Keyboard::L)) {
 			this->load_random_rule();
 		}
+		else if (this->event().key_single_pressed(sf::Keyboard::Q)) {
+			this->load_previous_file_rule();
+		}
+		else if (this->event().key_single_pressed(sf::Keyboard::E)) {
+			this->load_next_file_rule();
+		}
 		else if (this->event().key_single_pressed(sf::Keyboard::S)) {
 			auto file = qpl::to_string("rules/", qpl::get_current_time_string_ymdhmsms_compact(), "_rule.dat");
 			this->hexagons.rule.save(file);
@@ -698,6 +754,7 @@ struct main_state : qsf::base_state {
 	qsf::slider<qpl::size> slider_distinct_colors;
 	qsf::check_box checkbox_switch_states;
 	qpl::size file_index = 0u;
+	bool first_file_index_load = true;
 
 	qpl::circular_array<rule, 512> rules;
 

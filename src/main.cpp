@@ -664,6 +664,9 @@ struct main_state : qsf::base_state {
 		if (this->event().key_pressed(sf::Keyboard::A)) {
 			this->update_delta *= 1.2;
 		}
+		else if (this->event().key_single_pressed(sf::Keyboard::H)) {
+			this->hide_hud = !this->hide_hud;
+		}
 		else if (this->event().key_pressed(sf::Keyboard::D)) {
 			this->update_delta *= 1.0 / 1.2;
 		}
@@ -731,14 +734,16 @@ struct main_state : qsf::base_state {
 	}
 	void drawing() override {
 		this->draw(this->graphic, this->view);
-		this->draw(this->slider_empty_rule);
-		this->draw(this->slider_repeated_rule_change);
-		this->draw(this->slider_random_fill);
-		this->draw(this->slider_state_size);
-		this->draw(this->slider_neighbour_radius);
-		this->draw(this->slider_dimension);
-		this->draw(this->slider_distinct_colors);
-		this->draw(this->checkbox_switch_states);
+		if (!this->hide_hud) {
+			this->draw(this->slider_empty_rule);
+			this->draw(this->slider_repeated_rule_change);
+			this->draw(this->slider_random_fill);
+			this->draw(this->slider_state_size);
+			this->draw(this->slider_neighbour_radius);
+			this->draw(this->slider_dimension);
+			this->draw(this->slider_distinct_colors);
+			this->draw(this->checkbox_switch_states);
+		}
 	}
 
 	hexagons hexagons;
@@ -763,6 +768,7 @@ struct main_state : qsf::base_state {
 	qpl::size update_ctr = 0u;
 	qpl::size previous_rule_ctr = 0u;
 	bool auto_update = false;
+	bool hide_hud = false;
 };
 
 int main() try {

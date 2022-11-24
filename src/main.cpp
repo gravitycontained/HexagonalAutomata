@@ -228,8 +228,8 @@ struct hexagons {
 		return this->collection.cend();
 	}
 
-	hexagon get(qpl::i32 x, qpl::i32 y) const {
-		if (x < 0 || x >= this->dimension.x || y < 0 || y >= this->dimension.y) {
+	hexagon get(qpl::isize x, qpl::isize y) const {
+		if (x < 0 || x >= qpl::signed_cast(this->dimension.x) || y < 0 || y >= qpl::signed_cast(this->dimension.y)) {
 			return hexagon{ 0 };
 		}
 		else {
@@ -237,7 +237,7 @@ struct hexagons {
 		}
 	}
 
-	std::vector<neighbours_uint> count_neighbours(qpl::i32 x, qpl::i32 y) const {
+	std::vector<neighbours_uint> count_neighbours(qpl::isize x, qpl::isize y) const {
 		std::vector<neighbours_uint> result(info::state_size, 0);
 
 		for (qpl::isize col = 0; col < info::neighbours_radius * 2 + 1; ++col) {
@@ -253,7 +253,7 @@ struct hexagons {
 				auto cx = x + i - info::neighbours_radius + (qpl::abs(dy) / 2);
 				if ((dy % 2) && (y % 2)) cx += 1;
 
-				if (cx >= 0 && cy >= 0 && cx < this->dimension.x && cy < this->dimension.y) {
+				if (cx >= 0 && cy >= 0 && cx < qpl::signed_cast(this->dimension.x) && cy < qpl::signed_cast(this->dimension.y)) {
 					if (!(cx == x && cy == y)) {
 						auto value = this->get(cx, cy);
 						++result[value];
@@ -266,8 +266,8 @@ struct hexagons {
 	}
 	void udpate() {
 		auto copy = this->collection;
-		for (qpl::isize y = 0; y < this->dimension.y; ++y) {
-			for (qpl::isize x = 0; x < this->dimension.x; ++x) {
+		for (qpl::isize y = 0; y < qpl::signed_cast(this->dimension.y); ++y) {
+			for (qpl::isize x = 0; x < qpl::signed_cast(this->dimension.x); ++x) {
 				auto neighbours = this->count_neighbours(x, y);
 
 				auto& target = copy[y * this->dimension.x + x];
@@ -620,13 +620,13 @@ struct main_state : qsf::base_state {
 			this->randomize_hexagons();
 		}
 		if (this->slider_state_size.value_was_modified()) {
-			info::state_size = this->slider_state_size.get_value();
+			info::state_size = qpl::u32_cast(this->slider_state_size.get_value());
 			info::make_state_colors();
 			this->reset_previous_rules();
 			this->next_random_rule();
 		}
 		if (this->slider_neighbour_radius.value_was_modified()) {
-			info::neighbours_radius = this->slider_neighbour_radius.get_value();
+			info::neighbours_radius = qpl::i32_cast(this->slider_neighbour_radius.get_value());
 			info::calculate_neighbours_size();
 			this->reset_previous_rules();
 			this->next_random_rule();

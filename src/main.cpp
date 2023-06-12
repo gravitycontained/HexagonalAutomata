@@ -157,7 +157,7 @@ struct rule {
 		state.file_save(file);
 	}
 	void load(std::string file) {
-		qpl::save_state state;
+		qpl::load_state state;
 		state.file_load(file);
 
 		state.load(info::state_size);
@@ -748,7 +748,7 @@ struct main_state : qsf::base_state {
 
 	hexagons hexagons;
 	hexagons_graphic graphic;
-	qsf::view_rectangle view;
+	qsf::view_control view;
 
 	qsf::slider<qpl::f64> slider_empty_rule;
 	qsf::slider<qpl::f64> slider_repeated_rule_change;
